@@ -5,9 +5,11 @@ import (
 	"compress/flate"
 	"compress/gzip"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 )
@@ -20,6 +22,35 @@ func NewHttpClient(timeout int) *HttpClient {
 	httpClient := &HttpClient{}
 
 	transport := &http.Transport{
+		DisableCompression:  true,
+		TLSHandshakeTimeout: 10 * time.Second,
+		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+	}
+
+	httpClient._client = &http.Client{
+		Transport: transport,
+	}
+
+	if timeout > 0 {
+		httpClient._client.Timeout = time.Millisecond * time.Duration(timeout)
+	}
+
+	return httpClient
+}
+
+func NewHttpClientWithProxy(proxyip string, proxyport int32, timeout int) *HttpClient {
+	proxyUrl := fmt.Sprintf("http://%s:%d", proxyip, proxyport)
+
+	proxy, err := url.Parse(proxyUrl)
+
+	if err != nil {
+		return nil
+	}
+
+	httpClient := &HttpClient{}
+
+	transport := &http.Transport{
+		Proxy:               http.ProxyURL(proxy),
 		DisableCompression:  true,
 		TLSHandshakeTimeout: 10 * time.Second,
 		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
@@ -60,10 +91,10 @@ func NewHttpClientWithMaxIdleConns(maxidleconns, timeout int) *HttpClient {
 
 func (this *HttpClient) Request(method, url string, headers map[string]string, body io.Reader) (*http.Response, error) {
 	retry := 3
-	
+
 	var resp *http.Response
 	var req *http.Request
-	
+
 	var err error
 
 	for i := 0; i < retry; i++ {
@@ -76,7 +107,7 @@ func (this *HttpClient) Request(method, url string, headers map[string]string, b
 		for k, v := range headers {
 			req.Header.Set(k, v)
 		}
-		
+
 		resp, err = this._client.Do(req)
 
 		if err != nil {
